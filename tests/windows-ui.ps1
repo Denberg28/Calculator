@@ -23,6 +23,9 @@ public static class Native {
   [DllImport("user32.dll")] private static extern IntPtr SetActiveWindow(IntPtr w);
   [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr w);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr GetProp(IntPtr w, string name);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr w);
+  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr w);
   public static void Activate(IntPtr w) {
     uint process;
     uint target = GetWindowThreadProcessId(w, out process), own = GetCurrentThreadId();
@@ -47,7 +50,9 @@ function Click([int]$Index) {
     $button = [Native]::GetDlgItem($script:window, (100 + $Index))
     if ($button -eq [IntPtr]::Zero) { throw "Missing button $Index" }
     Send $button 0xF5
-    Write-Output "Click $Index -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
+    $rect = New-Object Native+Rect
+    [void][Native]::GetWindowRect($button,[ref]$rect)
+    Write-Output "Click $Index id $([Native]::GetDlgCtrlID($button)) enabled $([Native]::IsWindowEnabled($button)) rect $($rect.Left),$($rect.Top),$($rect.Right),$($rect.Bottom) command $([Native]::GetProp($script:window,'Calculator.LastCommand')) -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
 }
 function Expect([int]$Id, [string]$Expected) {
     $actual = Text $Id
@@ -132,4 +137,3 @@ try {
 } finally {
     if (!$process.HasExited) { $process.Kill(); $process.WaitForExit() }
 }
-

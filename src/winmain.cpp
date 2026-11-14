@@ -189,6 +189,7 @@ LRESULT CALLBACK procedure(HWND window, UINT message, WPARAM wparam, LPARAM lpar
         return 0;
     }
     case WM_COMMAND:
+        SetPropW(window, L"Calculator.LastCommand", reinterpret_cast<HANDLE>(wparam));
         if (HIWORD(wparam) == BN_CLICKED && LOWORD(wparam) >= 100 && LOWORD(wparam) < 120)
             action(tokens[LOWORD(wparam) - 100]);
         return 0;
