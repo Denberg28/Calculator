@@ -30,7 +30,12 @@ function Text([int]$Id) {
     [void][Native]::GetWindowText([Native]::GetDlgItem($script:window, $Id), $buffer, 512)
     return $buffer.ToString()
 }
-function Click([int]$Index) { Send ([Native]::GetDlgItem($script:window, (100 + $Index))) 0xF5 }
+function Click([int]$Index) {
+    $button = [Native]::GetDlgItem($script:window, (100 + $Index))
+    if ($button -eq [IntPtr]::Zero) { throw "Missing button $Index" }
+    Send $button 0xF5
+    Write-Output "Click $Index -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
+}
 function Expect([int]$Id, [string]$Expected) {
     $actual = Text $Id
     if ($actual -ne $Expected) { throw "Control ${Id}: expected '$Expected', got '$actual'" }
@@ -111,3 +116,4 @@ try {
 } finally {
     if (!$process.HasExited) { $process.Kill(); $process.WaitForExit() }
 }
+
