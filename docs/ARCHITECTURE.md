@@ -1,0 +1,13 @@
+# Architecture
+
+`src/calculator.cpp` owns a bounded recursive-descent expression parser and session controller, independent of Win32. Grammar: sum → product → unary → parenthesized sum or decimal/scientific literal. Multiplication/division precede addition/subtraction; operations at the same precedence associate left. Unary signs are supported. Parentheses require explicit multiplication. Input is limited to 256 characters, bounding parsing and nesting work.
+
+`evaluate(string_view)` returns `{ok, value, message}`. Parsing uses locale-independent `from_chars`, checks complete consumption, division by signed zero, number range, and every operation for a finite result. Errors return messages, never executable code. IEEE 754 double arithmetic is rounded to 15 significant digits for display. Arithmetic underflow can round to zero; literal numbers outside double range are rejected.
+
+`Session` owns expression, display, status, and completed flag. Input, equals, Backspace, and Clear are the only mutations. Errors preserve editable input. Completed result plus operator begins a new expression using displayed result; other input starts fresh. Equals after completion is idempotent. Backspace after completion edits displayed result.
+
+`src/winmain.cpp` owns windows, fonts/brushes, layout, input mapping, rendering, and clipboard ownership. All mouse/keyboard arithmetic actions call `Session`. Native buttons expose their text and focus; Tab/Space supports button navigation. Displays are native read-only edits, allowing selection and horizontal scrolling. Fonts/geometry scale with per-monitor DPI; high-contrast colors follow Windows. The single UI thread does bounded in-memory work with no network, file I/O, shell calls, plugins, or external execution. Clipboard operations occur only on Ctrl+C. GDI resources are released on replacement or shutdown.
+
+Interfaces: Windows message queue, native controls, and the Windows clipboard. No persistence, IPC protocol, external integration, or data migration. Tests use stable control IDs 100–119 (buttons), 200 (expression), 201 (result), 202 (error status); these are test interfaces, not a public extension API.
+
+Packaging: MSVC static runtime, executable manifest for `asInvoker`, Windows 10/11 and per-monitor v2 DPI; PE file metadata and `VERSION`. Source checks compare metadata versions. CI builds/tests on Linux and Windows. On an authorized main push or manual run, it publishes a new candidate version and tag after required automated gates; existing releases are preserved and require a version bump for another candidate. Explicit tag pushes must match VERSION. Release ZIP includes source commit/toolchain metadata and evidence. No certificate was provided; executables are unsigned.
