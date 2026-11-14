@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 public static class Native {
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr w, int id);
-  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr w, StringBuilder b, int n);
+  [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW", CharSet=CharSet.Unicode)] public static extern IntPtr ReadText(IntPtr w, uint m, IntPtr n, [Out] StringBuilder b, uint f, uint t, out IntPtr r);
   [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr w, uint m, IntPtr a, IntPtr b, uint f, uint t, out IntPtr r);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr w, uint m, IntPtr a, IntPtr b);
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr w, out Rect r);
@@ -23,9 +23,6 @@ public static class Native {
   [DllImport("user32.dll")] private static extern IntPtr SetActiveWindow(IntPtr w);
   [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr w);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr GetProp(IntPtr w, string name);
-  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr w);
-  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr w);
   public static void Activate(IntPtr w) {
     uint process;
     uint target = GetWindowThreadProcessId(w, out process), own = GetCurrentThreadId();
@@ -43,16 +40,18 @@ function Send([IntPtr]$Window, [uint32]$Message, [int]$A = 0, [int]$B = 0) {
 }
 function Text([int]$Id) {
     $buffer = New-Object Text.StringBuilder 512
-    [void][Native]::GetWindowText([Native]::GetDlgItem($script:window, $Id), $buffer, 512)
+    $result = [IntPtr]::Zero
+    # GetWindowText reads cached captions across processes, not live EDIT contents.
+    if ([Native]::ReadText([Native]::GetDlgItem($script:window, $Id), 0xD, [IntPtr]512, $buffer, 2, 3000, [ref]$result) -eq [IntPtr]::Zero) {
+        throw "Control $Id failed to respond to WM_GETTEXT"
+    }
     return $buffer.ToString()
 }
 function Click([int]$Index) {
     $button = [Native]::GetDlgItem($script:window, (100 + $Index))
     if ($button -eq [IntPtr]::Zero) { throw "Missing button $Index" }
     Send $button 0xF5
-    $rect = New-Object Native+Rect
-    [void][Native]::GetWindowRect($button,[ref]$rect)
-    Write-Output "Click $Index id $([Native]::GetDlgCtrlID($button)) enabled $([Native]::IsWindowEnabled($button)) rect $($rect.Left),$($rect.Top),$($rect.Right),$($rect.Bottom) command $([Native]::GetProp($script:window,'Calculator.LastCommand')) click $([Native]::GetProp($script:window,'Calculator.LastClick')) token $([Native]::GetProp($script:window,'Calculator.LastToken')) length $([Native]::GetProp($script:window,'Calculator.InputLength')) -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
+    Write-Output "Click $Index -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
 }
 function Expect([int]$Id, [string]$Expected) {
     $actual = Text $Id
