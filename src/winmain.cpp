@@ -190,8 +190,12 @@ LRESULT CALLBACK procedure(HWND window, UINT message, WPARAM wparam, LPARAM lpar
     }
     case WM_COMMAND:
         SetPropW(window, L"Calculator.LastCommand", reinterpret_cast<HANDLE>(wparam));
-        if (HIWORD(wparam) == BN_CLICKED && LOWORD(wparam) >= 100 && LOWORD(wparam) < 120)
+        if (HIWORD(wparam) == BN_CLICKED && LOWORD(wparam) >= 100 && LOWORD(wparam) < 120) {
+            SetPropW(window, L"Calculator.LastClick", reinterpret_cast<HANDLE>(wparam));
+            SetPropW(window, L"Calculator.LastToken", reinterpret_cast<HANDLE>(static_cast<INT_PTR>(tokens[LOWORD(wparam) - 100])));
             action(tokens[LOWORD(wparam) - 100]);
+            SetPropW(window, L"Calculator.InputLength", reinterpret_cast<HANDLE>(app.session.expression().size()));
+        }
         return 0;
     case WM_SIZE: layout(window); return 0;
     case WM_DPICHANGED:

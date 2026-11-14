@@ -52,7 +52,7 @@ function Click([int]$Index) {
     Send $button 0xF5
     $rect = New-Object Native+Rect
     [void][Native]::GetWindowRect($button,[ref]$rect)
-    Write-Output "Click $Index id $([Native]::GetDlgCtrlID($button)) enabled $([Native]::IsWindowEnabled($button)) rect $($rect.Left),$($rect.Top),$($rect.Right),$($rect.Bottom) command $([Native]::GetProp($script:window,'Calculator.LastCommand')) -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
+    Write-Output "Click $Index id $([Native]::GetDlgCtrlID($button)) enabled $([Native]::IsWindowEnabled($button)) rect $($rect.Left),$($rect.Top),$($rect.Right),$($rect.Bottom) command $([Native]::GetProp($script:window,'Calculator.LastCommand')) click $([Native]::GetProp($script:window,'Calculator.LastClick')) token $([Native]::GetProp($script:window,'Calculator.LastToken')) length $([Native]::GetProp($script:window,'Calculator.InputLength')) -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
 }
 function Expect([int]$Id, [string]$Expected) {
     $actual = Text $Id
@@ -81,6 +81,7 @@ try {
     [Native]::Activate($window)
     Write-Output "Calculator window $window; foreground $([Native]::GetForegroundWindow())"
     Expect 201 '0'
+    Type '1'; Key 0x1B; Expect 200 ''
     # All mouse buttons; arithmetic, precedence, decimal and negative results.
     Click 4; Click 19; Click 10; Click 18; Expect 201 '13'
     Click 0; Click 1; Click 13; Click 19; Click 14; Click 2; Click 11; Click 8; Click 18; Expect 201 '20'
