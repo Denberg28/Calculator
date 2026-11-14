@@ -27,10 +27,14 @@ try {
     $compiler = Get-ChildItem $BuildDir -Recurse -Filter CMakeCXXCompiler.cmake | Select-Object -First 1
     if (!$compiler) { throw 'Compiler metadata not found' }
     $toolchain = Get-Content $compiler.FullName | Where-Object { $_ -match 'CMAKE_CXX_COMPILER(_ID|_VERSION)? ' }
+    # Capture all native output before selecting a line, avoiding a closed pipe
+    # and a misleading nonzero LASTEXITCODE in the Actions PowerShell wrapper.
+    $cmakeVersionLines = & cmake --version
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot capture CMake version' }
     $info = [ordered]@{
         version=$version; sourceCommit=$commit; repository='Denberg28/Calculator'; architecture='x64';
         releaseTier='test candidate'; signed=$false; runtime='MSVC static'; compiler=$toolchain;
-        os=[Environment]::OSVersion.VersionString; cmake=(& cmake --version | Select-Object -First 1);
+        os=[Environment]::OSVersion.VersionString; cmake=$cmakeVersionLines[0];
         workflowRun=$env:GITHUB_RUN_ID; buildUtc=[DateTime]::UtcNow.ToString('o');
         automatedTests='ctest passed before packaging; package UI gate required before publication';
         desktopValidation='NOT TESTED: manual Windows 10/11, DPI, physical keyboard, clipboard, accessibility';
@@ -51,3 +55,4 @@ try {
         ConvertTo-Json | Set-Content 'dist/package-build.json' -Encoding UTF8
     Write-Output "PASS: $zip, version, metadata, extraction, checksum and packaged Windows UI gate"
 } finally { Pop-Location }
+
