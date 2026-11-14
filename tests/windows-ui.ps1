@@ -17,6 +17,19 @@ public static class Native {
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr w, IntPtr z, int x, int y, int width, int height, uint f);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr w, IntPtr dc, uint f);
   [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr w);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr w, out uint process);
+  [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint from, uint to, bool attach);
+  [DllImport("user32.dll")] private static extern IntPtr SetActiveWindow(IntPtr w);
+  [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr w);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  public static void Activate(IntPtr w) {
+    uint process;
+    uint target = GetWindowThreadProcessId(w, out process), own = GetCurrentThreadId();
+    bool attached = AttachThreadInput(own, target, true);
+    try { SetForegroundWindow(w); SetActiveWindow(w); }
+    finally { if (attached) AttachThreadInput(own, target, false); }
+  }
 }
 '@
 function Send([IntPtr]$Window, [uint32]$Message, [int]$A = 0, [int]$B = 0) {
@@ -59,6 +72,9 @@ try {
     do { Start-Sleep -Milliseconds 100; $process.Refresh() } until ($process.MainWindowHandle -ne 0 -or $process.HasExited -or [DateTime]::UtcNow -gt $deadline)
     if ($process.HasExited -or $process.MainWindowHandle -eq 0) { throw 'Calculator did not open' }
     $script:window = $process.MainWindowHandle
+    # BM_CLICK needs an active parent; CI's PowerShell owns a different input thread.
+    [Native]::Activate($window)
+    Write-Output "Calculator window $window; foreground $([Native]::GetForegroundWindow())"
     Expect 201 '0'
     # All mouse buttons; arithmetic, precedence, decimal and negative results.
     Click 4; Click 19; Click 10; Click 18; Expect 201 '13'
