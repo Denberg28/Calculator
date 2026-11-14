@@ -32,13 +32,13 @@ public static class Native {
   }
 }
 '@
-function Send([IntPtr]$Window, [uint32]$Message, [int]$A = 0, [int]$B = 0) {
+function Send-WindowMessage([IntPtr]$Window, [uint32]$Message, [int]$A = 0, [int]$B = 0) {
     $result = [IntPtr]::Zero
     if ([Native]::SendMessageTimeout($Window, $Message, [IntPtr]$A, [IntPtr]$B, 2, 3000, [ref]$result) -eq [IntPtr]::Zero) {
         throw "Window failed to respond: $Message"
     }
 }
-function Text([int]$Id) {
+function Read-ControlText([int]$Id) {
     $buffer = New-Object Text.StringBuilder 512
     $result = [IntPtr]::Zero
     # GetWindowText reads cached captions across processes, not live EDIT contents.
@@ -47,27 +47,27 @@ function Text([int]$Id) {
     }
     return $buffer.ToString()
 }
-function Click([int]$Index) {
+function Press-CalculatorButton([int]$Index) {
     $button = [Native]::GetDlgItem($script:window, (100 + $Index))
     if ($button -eq [IntPtr]::Zero) { throw "Missing button $Index" }
-    Send $button 0xF5
-    Write-Output "Click $Index -> expression '$(Text 200)', result '$(Text 201)', status '$(Text 202)'"
+    Send-WindowMessage $button 0xF5
+    Write-Output "Press-CalculatorButton $Index -> expression '$(Read-ControlText 200)', result '$(Read-ControlText 201)', status '$(Read-ControlText 202)'"
 }
-function Expect([int]$Id, [string]$Expected) {
-    $actual = Text $Id
+function Assert-ControlText([int]$Id, [string]$Expected) {
+    $actual = Read-ControlText $Id
     if ($actual -ne $Expected) { throw "Control ${Id}: expected '$Expected', got '$actual'" }
 }
-function Type([string]$Expression) {
+function Enter-Expression([string]$Expression) {
     foreach ($character in $Expression.ToCharArray()) {
         if (![Native]::PostMessage($script:window, 0x102, [IntPtr][int]$character, [IntPtr]::Zero)) { throw 'PostMessage failed' }
     }
     # Synchronize with a posted UI barrier by polling observable state (bounded).
     $deadline = [DateTime]::UtcNow.AddSeconds(3)
-    do { Start-Sleep -Milliseconds 20 } until ((Text 200) -eq $Expression -or [DateTime]::UtcNow -gt $deadline)
-    Expect 200 $Expression
+    do { Start-Sleep -Milliseconds 20 } until ((Read-ControlText 200) -eq $Expression -or [DateTime]::UtcNow -gt $deadline)
+    Assert-ControlText 200 $Expression
 }
-function Key([int]$Code) {
-    if (![Native]::PostMessage($script:window, 0x100, [IntPtr]$Code, [IntPtr]::Zero)) { throw 'Key failed' }
+function Press-CalculatorKey([int]$Code) {
+    if (![Native]::PostMessage($script:window, 0x100, [IntPtr]$Code, [IntPtr]::Zero)) { throw 'Press-CalculatorKey failed' }
     Start-Sleep -Milliseconds 100
 }
 $process = Start-Process -FilePath (Resolve-Path $Exe) -PassThru
@@ -79,28 +79,28 @@ try {
     # BM_CLICK needs an active parent; CI's PowerShell owns a different input thread.
     [Native]::Activate($window)
     Write-Output "Calculator window $window; foreground $([Native]::GetForegroundWindow())"
-    Expect 201 '0'
-    Type '1'; Key 0x1B; Expect 200 ''
+    Assert-ControlText 201 '0'
+    Enter-Expression '1'; Press-CalculatorKey 0x1B; Assert-ControlText 200 ''
     # All mouse buttons; arithmetic, precedence, decimal and negative results.
-    Click 4; Click 19; Click 10; Click 18; Expect 201 '13'
-    Click 0; Click 1; Click 13; Click 19; Click 14; Click 2; Click 11; Click 8; Click 18; Expect 201 '20'
-    Click 0; Click 5; Click 15; Click 12; Click 18; Expect 201 '7'
-    Click 0; Click 8; Click 15; Click 6; Click 18; Expect 201 '-5'
-    Click 0; Click 4; Click 7; Click 16; Click 18; Expect 202 'Cannot divide by zero'
-    Click 3; Click 13; Click 18; Expect 201 '3.5'; Expect 202 ''
-    Click 0; Click 16; Click 17; Click 9; Click 11; Click 8; Click 18; Expect 201 '2'
+    Press-CalculatorButton 4; Press-CalculatorButton 19; Press-CalculatorButton 10; Press-CalculatorButton 18; Assert-ControlText 201 '13'
+    Press-CalculatorButton 0; Press-CalculatorButton 1; Press-CalculatorButton 13; Press-CalculatorButton 19; Press-CalculatorButton 14; Press-CalculatorButton 2; Press-CalculatorButton 11; Press-CalculatorButton 8; Press-CalculatorButton 18; Assert-ControlText 201 '20'
+    Press-CalculatorButton 0; Press-CalculatorButton 5; Press-CalculatorButton 15; Press-CalculatorButton 12; Press-CalculatorButton 18; Assert-ControlText 201 '7'
+    Press-CalculatorButton 0; Press-CalculatorButton 8; Press-CalculatorButton 15; Press-CalculatorButton 6; Press-CalculatorButton 18; Assert-ControlText 201 '-5'
+    Press-CalculatorButton 0; Press-CalculatorButton 4; Press-CalculatorButton 7; Press-CalculatorButton 16; Press-CalculatorButton 18; Assert-ControlText 202 'Cannot divide by zero'
+    Press-CalculatorButton 3; Press-CalculatorButton 13; Press-CalculatorButton 18; Assert-ControlText 201 '3.5'; Assert-ControlText 202 ''
+    Press-CalculatorButton 0; Press-CalculatorButton 16; Press-CalculatorButton 17; Press-CalculatorButton 9; Press-CalculatorButton 11; Press-CalculatorButton 8; Press-CalculatorButton 18; Assert-ControlText 201 '2'
     # Keyboard events travel through the application's message loop.
-    Key 0x1B; Expect 200 ''; Expect 201 '0'
-    Type '2+3*4'; Key 0x0D; Expect 201 '14'
-    Key 0x0D; Expect 201 '14'
-    Key 0x2E; Type '12'; Key 0x08; Expect 200 '1'
-    Key 0x1B; Type '(2+3'; Key 0x0D; Expect 202 'Close the parentheses'
-    Key 0x1B; Type '7/2'; Key 0x0D; Expect 201 '3.5'
+    Press-CalculatorKey 0x1B; Assert-ControlText 200 ''; Assert-ControlText 201 '0'
+    Enter-Expression '2+3*4'; Press-CalculatorKey 0x0D; Assert-ControlText 201 '14'
+    Press-CalculatorKey 0x0D; Assert-ControlText 201 '14'
+    Press-CalculatorKey 0x2E; Enter-Expression '12'; Press-CalculatorKey 0x08; Assert-ControlText 200 '1'
+    Press-CalculatorKey 0x1B; Enter-Expression '(2+3'; Press-CalculatorKey 0x0D; Assert-ControlText 202 'Close the parentheses'
+    Press-CalculatorKey 0x1B; Enter-Expression '7/2'; Press-CalculatorKey 0x0D; Assert-ControlText 201 '3.5'
     # The application constrains small window sizes and keeps every key in the client area.
     $dpi = [Native]::GetDpiForWindow($window)
     foreach ($size in @(@(320,480), @(360,540), @(720,900))) {
         [void][Native]::SetWindowPos($window, [IntPtr]::Zero, 0, 0, [int]($size[0]*$dpi/96), [int]($size[1]*$dpi/96), 6)
-        Send $window 0
+        Send-WindowMessage $window 0
         $client = New-Object Native+Rect
         [void][Native]::GetClientRect($window, [ref]$client)
         foreach ($id in 100..119) {
@@ -109,7 +109,7 @@ try {
             [void][Native]::MapWindowPoints([IntPtr]::Zero,$window,[ref]$rect,2)
             if ($rect.Left -lt 0 -or $rect.Top -lt 0 -or $rect.Right -gt $client.Right -or $rect.Bottom -gt $client.Bottom -or $rect.Right -le $rect.Left -or $rect.Bottom -le $rect.Top) { throw "Button $id clipped at $size" }
         }
-        Expect 201 '3.5'
+        Assert-ControlText 201 '3.5'
     }
     [void][Native]::SetWindowPos($window, [IntPtr]::Zero, 0, 0, [int](400*$dpi/96), [int](620*$dpi/96), 6)
     Start-Sleep -Milliseconds 150
@@ -137,3 +137,4 @@ try {
 } finally {
     if (!$process.HasExited) { $process.Kill(); $process.WaitForExit() }
 }
+
